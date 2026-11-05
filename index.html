@@ -464,7 +464,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                         ...defaultState, 
                         ...parsed, 
                         settings: { ...defaultState.settings, ...(parsed.settings || {}) },
-                        subjects: parsed.subjects && parsed.subjects.length > 0 ? parsed.subjects : defaultState.subjects,
+                        subjects: [...defaultState.subjects, ...((parsed.subjects || []).filter(subject => !defaultState.subjects.includes(subject)))],
                     missedBonusValues: Array.isArray(parsed.missedBonusValues) ? parsed.missedBonusValues : []
                     };
                 }
