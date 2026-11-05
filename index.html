@@ -57,6 +57,8 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
 .group:hover .group-hover\:opacity-100{opacity:1}.duration-500{transition-duration:.5s}.transition-all{transition-property:all}.animate-spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 @media(max-width:420px){header .text-2xl{font-size:1.25rem}header .px-3\.5{padding-left:.65rem;padding-right:.65rem}main{padding:.8rem}.text-6xl{font-size:3.25rem}}
 
+
+        .subject-btn,.learning-option,.history-subject{transition:all .15s ease}
 </style>
 </head>
 <body class="bg-slate-100 min-h-screen text-slate-800 flex flex-col justify-between select-none">
@@ -167,7 +169,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                         <!-- Benachrichtigung für garantierten Extra-Bonuswurf nach 3 Nieten -->
                         <div id="guaranteed-bonus-badge" class="hidden bg-amber-100 text-amber-800 text-[11px] font-extrabold px-3 py-1.5 rounded-full inline-flex items-center gap-1.5 border border-amber-300 mt-2 shadow-sm animate-pulse">
                             <span>🔥</span>
-                            <span>3 Nieten! Es wird sofort automatisch noch einmal normal gewürfelt.</span>
+                            <span>3 Nieten! Dein nächster Wurf ist ein Bonuswurf mit dem Mittelwert der 3 Bonuswerte.</span>
                         </div>
                     </div>
 
@@ -329,10 +331,14 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 <div class="space-y-2">
                     <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">Bonusminuten je Lernstufe</label>
                     
-                    <div class="grid grid-cols-3 gap-2 text-xs">
+                    <div class="grid grid-cols-2 gap-2 text-xs">
                         <div class="bg-slate-50 p-2 rounded-xl border border-slate-200 text-center">
                             <span class="block text-slate-500 mb-1 text-[10px]">10 Min Lernzeit</span>
                             <input type="number" id="setting-bonus-10" min="0" class="w-full text-center bg-white border border-slate-200 rounded py-1 font-bold">
+                        </div>
+                        <div class="bg-slate-50 p-2 rounded-xl border border-slate-200 text-center">
+                            <span class="block text-slate-500 mb-1 text-[10px]">15 Min Lernzeit</span>
+                            <input type="number" id="setting-bonus-15" min="0" class="w-full text-center bg-white border border-slate-200 rounded py-1 font-bold">
                         </div>
                         <div class="bg-slate-50 p-2 rounded-xl border border-slate-200 text-center">
                             <span class="block text-slate-500 mb-1 text-[10px]">20 Min Lernzeit</span>
@@ -431,15 +437,16 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             consecutiveLosses: 0, // Zähler für aufeinanderfolgende Verluste
             missedBonusValues: [], // Bonuswerte der aufeinanderfolgenden Nieten
             selectedSubject: 'Mathe',
-            subjects: ['Mathe', 'Englisch', 'Latein'],
+            subjects: ['Latein', 'Englisch', 'Mathe', 'Musik', 'HSU', 'Deutsch'],
             settings: {
                 winRate: 50,
                 maxDailyBonus: 30,
-                standardMinutesPer10: 1,
                 tierBonuses: {
-                    10: 2,
+                    10: 1,
+                    15: 2,
                     20: 3,
-                    25: 4
+                    25: 4,
+                    30: 5
                 }
             },
             history: [],
@@ -499,62 +506,37 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 setupDrawPage(appState.activeSession.learnTime, appState.activeSession.subject);
                 showSection('draw');
             } else if (appState.activeSession && appState.activeSession.drawn) {
-                appState.activeSession = null;
-                saveData();
+                appState.activeSession = null; saveData();
             }
         };
-
         function getFamilyPassword() {
-            let password = localStorage.getItem(PASSWORD_KEY) || '';
-            if (!password) {
-                password = prompt('Familienpasswort für das Lernkonto:') || '';
-                if (password) localStorage.setItem(PASSWORD_KEY, password);
-            }
+            let password=localStorage.getItem(PASSWORD_KEY)||'';
+            if(!password){password=prompt('Familienpasswort für das Lernkonto:')||'';if(password)localStorage.setItem(PASSWORD_KEY,password);}
             return password;
         }
-
-        function mapServerEntry(e) {
-            const timestamp = e.datum ? `${e.datum} ${e.uhrzeit || ''}` : new Date().toISOString();
-            if (e.typ === 'Einlösung') return { id:e.id, timestamp, type:'redeem', usedMinutes:Math.abs(e.standard || 0), balanceAfter:e.kontostand };
-            if (e.typ === 'Korrektur') return { id:e.id, timestamp, type:'adjust', balanceAfter:e.kontostand };
-            return { id:e.id, timestamp, type:'learn', learnTime:e.lernzeit, subject:e.fach, won:(e.bonus||0)>0, bonusWon:e.bonus||0, standardWon:e.standard||0, drawResult:e.wuerfelergebnis||'', balanceAfter:e.kontostand };
+        function parseSheetTimestamp(datum,uhrzeit){
+            const m=String(datum||'').match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+            if(!m)return new Date().toISOString();
+            return `${m[3]}-${m[2]}-${m[1]}T${uhrzeit||'00:00'}:00`;
         }
-
-        async function syncFromGoogle(showErrors=false) {
-            const password = getFamilyPassword();
-            if (!password) return false;
-            try {
-                const r = await fetch(API_URL + '?password=' + encodeURIComponent(password), { cache:'no-store' });
-                const data = await r.json();
-                if (!data.ok) throw new Error(data.error || 'Synchronisierung fehlgeschlagen');
-                appState.balance = data.status.kontostand;
-                appState.consecutiveLosses = data.status.nietenInFolge;
-                appState.history = (data.entries || []).slice().reverse().map(mapServerEntry);
-                if (data.config) {
-                    appState.settings.winRate = data.config.gewinnchanceProzent ?? appState.settings.winRate;
-                    appState.settings.maxDailyBonus = data.config.maxTagesbonus ?? appState.settings.maxDailyBonus;
-                    appState.settings.tierBonuses = data.config.bonusStufen || appState.settings.tierBonuses;
-                    appState.settings.standardMinutesPer10 = data.config.standardVerdienst ?? 1;
-                }
-                saveData(); updateUI(); return true;
-            } catch (err) {
-                console.error(err);
-                if (showErrors) {
-                    localStorage.removeItem(PASSWORD_KEY);
-                    alert('Google-Synchronisierung fehlgeschlagen: ' + err.message + '\nBeim nächsten Laden wird das Passwort erneut abgefragt.');
-                }
-                return false;
-            }
+        function mapServerEntry(e){
+            const timestamp=parseSheetTimestamp(e.datum,e.uhrzeit);
+            if(e.typ==='Einlösung')return{id:e.id,timestamp,type:'redeem',usedMinutes:Math.abs(Number(e.standard)||0),balanceAfter:Number(e.kontostand)||0};
+            if(e.typ==='Korrektur')return{id:e.id,timestamp,type:'adjust',balanceAfter:Number(e.kontostand)||0};
+            return{id:e.id,timestamp,type:'learn',learnTime:Number(e.lernzeit)||0,subject:e.fach,won:(Number(e.bonus)||0)>0,bonusWon:Number(e.bonus)||0,standardWon:Number(e.standard)||0,drawResult:e.wuerfelergebnis||'',balanceAfter:Number(e.kontostand)||0};
         }
-
-        async function apiPost(payload) {
-            payload.password = getFamilyPassword();
-            const r = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload) });
-            const data = await r.json();
-            if (!data.ok) throw new Error(data.error || 'Speichern fehlgeschlagen');
-            return data;
+        async function syncFromGoogle(showErrors=false){
+            const password=getFamilyPassword();if(!password)return false;
+            try{
+                const r=await fetch(API_URL+'?password='+encodeURIComponent(password),{cache:'no-store'});const data=await r.json();
+                if(!data.ok)throw new Error(data.error||'Synchronisierung fehlgeschlagen');
+                appState.balance=Number(data.status.kontostand)||0;appState.consecutiveLosses=Number(data.status.nietenInFolge)||0;
+                appState.history=(data.entries||[]).slice().reverse().map(mapServerEntry);
+                if(data.config){appState.settings.winRate=data.config.gewinnchanceProzent??50;appState.settings.maxDailyBonus=data.config.maxTagesbonus??30;appState.settings.tierBonuses=data.config.bonusStufen||appState.settings.tierBonuses;}
+                saveData();updateUI();return true;
+            }catch(err){console.error(err);if(showErrors){localStorage.removeItem(PASSWORD_KEY);alert('Google-Synchronisierung fehlgeschlagen: '+err.message+'\nBeim nächsten Laden wird das Passwort erneut abgefragt.');}return false;}
         }
-
+        async function apiPost(payload){payload.password=getFamilyPassword();const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});const data=await r.json();if(!data.ok)throw new Error(data.error||'Speichern fehlgeschlagen');return data;}
 
         // --- 3. UI RENDERER & NAVIGATION ---
         function showSection(sectionId) {
@@ -580,6 +562,17 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             renderHistoryView();
         }
 
+        const SUBJECT_COLORS = {
+            'Mathe': '#3b82f6', 'Deutsch': '#ef4444', 'Englisch': '#10b981',
+            'Latein': '#8b5cf6', 'HSU': '#14b8a6', 'Musik': '#f59e0b'
+        };
+        const DEFAULT_SUBJECT_COLOR = '#64748b'; // neue/unbekannte Fächer: Slate-Grau
+        function subjectColor(subject) { return SUBJECT_COLORS[subject] || DEFAULT_SUBJECT_COLOR; }
+        function hexToRgba(hex, alpha) {
+            const v=hex.replace('#',''); const n=parseInt(v,16);
+            return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`;
+        }
+
         function renderSubjectSelector() {
             const container = document.getElementById('subject-selector-container');
             container.innerHTML = '';
@@ -596,13 +589,18 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                     appState.selectedSubject = subject;
                     saveData();
                     renderSubjectSelector();
+                    renderLearningOptions();
                 };
-                btn.className = `px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                btn.className = `subject-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
                     isSelected 
                         ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20 scale-105' 
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`;
 
+                const color = subjectColor(subject);
+                btn.style.backgroundColor = isSelected ? color : hexToRgba(color,.11);
+                btn.style.color = isSelected ? '#fff' : color;
+                btn.style.border = `1px solid ${hexToRgba(color,.35)}`;
                 btn.innerHTML = `
                     <span class="${isSelected ? 'fa-check-circle' : 'fa-book-bookmark'}">✓</span>
                     <span>${subject}</span>
@@ -615,7 +613,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             const container = document.getElementById('learning-options-container');
             container.innerHTML = '';
 
-            const tiers = [10, 20, 25];
+            const tiers = [10, 15, 20, 25, 30];
             const colors = [
                 { bg: 'bg-emerald-50', hover: 'hover:bg-emerald-100', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-500' },
                 { bg: 'bg-blue-50', hover: 'hover:bg-blue-100', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-500' },
@@ -625,14 +623,16 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             tiers.forEach((minutes, index) => {
                 const bonus = appState.settings.tierBonuses[minutes] || 0;
                 const style = colors[index % colors.length];
+                const color = subjectColor(appState.selectedSubject);
 
                 const btn = document.createElement('button');
-                btn.className = `${style.bg} ${style.hover} border-2 ${style.border} rounded-2xl p-3.5 transition flex items-center justify-between shadow-sm active:scale-[0.98]`;
+                btn.className = `learning-option border-2 rounded-2xl p-3.5 transition flex items-center justify-between shadow-sm active:scale-[0.98]`;
+                btn.style.backgroundColor = hexToRgba(color,.08); btn.style.borderColor = hexToRgba(color,.35);
                 btn.onclick = () => startSession(minutes, bonus);
 
                 btn.innerHTML = `
                     <div class="flex items-center gap-3">
-                        <div class="${style.badge} text-white font-bold rounded-xl px-3 py-1.5 text-base shadow-sm font-kids">
+                        <div class="text-white font-bold rounded-xl px-3 py-1.5 text-base shadow-sm font-kids" style="background:${color}">
                             ${minutes}m
                         </div>
                         <div class="text-left">
@@ -642,7 +642,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                     </div>
                     <div class="bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-xl border border-slate-200 text-right">
                         <span class="text-[10px] text-slate-400 block font-bold uppercase">Möglicher Bonus</span>
-                        <span class="font-bold ${style.text} text-xs">+${bonus} Minuten</span>
+                        <span class="font-bold text-xs" style="color:${color}">+${bonus} Minuten</span>
                     </div>
                 `;
 
@@ -674,7 +674,11 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
 
             // Zeige Hinweis auf garantierten Bonus nach 3 Fehlversuchen
             const badge = document.getElementById('guaranteed-bonus-badge');
-            badge.classList.add('hidden');
+            if (appState.consecutiveLosses >= 3) {
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
 
             document.getElementById('draw-state-ready').classList.remove('hidden');
             document.getElementById('draw-state-anim').classList.add('hidden');
@@ -686,42 +690,22 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
         }
 
         async function performDraw() {
-            if (!appState.activeSession || appState.activeSession.drawn) {
-                alert("Für diese Lernsession wurde die Bonusziehung bereits durchgeführt!"); return;
-            }
-            const drawBtn=document.getElementById('btn-draw'); drawBtn.disabled=true;
-            document.getElementById('draw-state-ready').classList.add('hidden');
-            document.getElementById('draw-state-anim').classList.remove('hidden');
-            const session={...appState.activeSession};
-            try {
+            if(!appState.activeSession||appState.activeSession.drawn){alert('Für diese Lernsession wurde die Bonusziehung bereits durchgeführt!');return;}
+            const btn=document.getElementById('btn-draw');btn.disabled=true;document.getElementById('draw-state-ready').classList.add('hidden');document.getElementById('draw-state-anim').classList.remove('hidden');
+            const session={...appState.activeSession};const started=Date.now();
+            try{
                 const data=await apiPost({action:'learn',entry:{id:String(session.id),fach:session.subject,lernzeit:session.learnTime}});
-                const res=data.result || {};
-                appState.activeSession.drawn=true;
-                appState.balance=data.status.kontostand;
-                appState.consecutiveLosses=data.status.nietenInFolge;
-                await syncFromGoogle(false);
-                document.getElementById('draw-state-anim').classList.add('hidden');
-                document.getElementById('draw-state-result').classList.remove('hidden');
-                const title=document.getElementById('result-title'), desc=document.getElementById('result-desc'), icon=document.getElementById('result-icon');
-                const standard=res.standard || 0, bonus=res.bonus || 0;
-                if (res.gewonnen && bonus>0) {
-                    icon.innerText=res.zusatzwurf?'🎲🎉':'🎉';
-                    title.innerText=`+${standard} Standard +${bonus} Bonus`;
-                    title.className='text-xl font-bold text-emerald-600 font-kids';
-                    desc.innerText=res.wuerfelergebnis; triggerConfetti();
-                } else {
-                    icon.innerText=res.zusatzwurf?'🎲👍':'👍';
-                    title.innerText=`+${standard} Standardminute${standard===1?'':'n'}`;
-                    title.className='text-xl font-bold text-slate-700 font-kids';
-                    desc.innerText=res.wuerfelergebnis || 'Diesmal kein Würfelbonus.';
-                }
-                drawBtn.classList.add('hidden'); document.getElementById('btn-next-session').classList.remove('hidden'); updateUI();
-            } catch(err) {
-                document.getElementById('draw-state-anim').classList.add('hidden');
-                document.getElementById('draw-state-ready').classList.remove('hidden'); drawBtn.disabled=false;
-                alert('Speichern fehlgeschlagen: '+err.message+'\nEs wurde nichts gebucht.');
-            }
+                const wait=Math.max(0,1500-(Date.now()-started));await new Promise(r=>setTimeout(r,wait));
+                const res=data.result||{};
+                if(res.zusatzwurf){const p=document.querySelector('#draw-state-anim p');p.innerText='Zusatzwurf! Noch einmal würfeln...';await new Promise(r=>setTimeout(r,1500));p.innerText='Bonus wird ermittelt...';}
+                appState.activeSession.drawn=true;appState.balance=Number(data.status.kontostand)||0;appState.consecutiveLosses=Number(data.status.nietenInFolge)||0;await syncFromGoogle(false);
+                document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-result').classList.remove('hidden');
+                const title=document.getElementById('result-title'),desc=document.getElementById('result-desc'),icon=document.getElementById('result-icon');const standard=Number(res.standard)||0,bonus=Number(res.bonus)||0;
+                icon.innerText=res.zusatzwurf?(bonus>0?'🎲🎉':'🎲👍'):(bonus>0?'🎉':'👍');title.innerText=`+${formatMinutes(standard)} Standard${bonus>0?' +'+formatMinutes(bonus)+' Bonus':''}`;title.className='text-xl font-bold '+(bonus>0?'text-emerald-600':'text-slate-700')+' font-kids';desc.innerText=res.wuerfelergebnis||'Diesmal kein Würfelbonus.';if(bonus>0)triggerConfetti();
+                btn.classList.add('hidden');document.getElementById('btn-next-session').classList.remove('hidden');updateUI();
+            }catch(err){document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-ready').classList.remove('hidden');btn.disabled=false;alert('Speichern fehlgeschlagen: '+err.message+'\nEs wurde nichts gebucht.');}
         }
+        function formatMinutes(v){return Number(v).toLocaleString('de-DE',{maximumFractionDigits:1});}
         function resetToMain() {
             appState.activeSession = null;
             saveData();
@@ -877,7 +861,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                         <span>${mins} Min (${pct}%)</span>
                     </div>
                     <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                        <div class="bg-indigo-500 h-2 rounded-full transition-all duration-500" style="width: ${pct}%"></div>
+                        <div class="h-2 rounded-full transition-all duration-500" style="width:${pct}%;background:${subjectColor(sub)}"></div>
                     </div>
                 `;
                 container.appendChild(row);
@@ -893,7 +877,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             if (entry.type === 'learn') {
                 item.innerHTML = `
                     <div class="flex items-center gap-2.5">
-                        <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs" style="background:${hexToRgba(subjectColor(entry.subject),.15)};color:${subjectColor(entry.subject)}">
                             <span class="">●</span>
                         </div>
                         <div>
@@ -1005,8 +989,10 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             document.getElementById('setting-max-daily-bonus').value = appState.settings.maxDailyBonus;
             
             document.getElementById('setting-bonus-10').value = appState.settings.tierBonuses[10] || 2;
+            document.getElementById('setting-bonus-15').value = appState.settings.tierBonuses[15] || 2;
             document.getElementById('setting-bonus-20').value = appState.settings.tierBonuses[20] || 3;
             document.getElementById('setting-bonus-25').value = appState.settings.tierBonuses[25] || 4;
+            document.getElementById('setting-bonus-30').value = appState.settings.tierBonuses[30] || 5;
 
             document.getElementById('setting-manual-balance').value = appState.balance;
 
@@ -1018,22 +1004,17 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             appState.settings.maxDailyBonus = parseInt(document.getElementById('setting-max-daily-bonus').value) || 30;
 
             appState.settings.tierBonuses[10] = parseInt(document.getElementById('setting-bonus-10').value) || 0;
+            appState.settings.tierBonuses[15] = parseInt(document.getElementById('setting-bonus-15').value) || 0;
             appState.settings.tierBonuses[20] = parseInt(document.getElementById('setting-bonus-20').value) || 0;
             appState.settings.tierBonuses[25] = parseInt(document.getElementById('setting-bonus-25').value) || 0;
+            appState.settings.tierBonuses[30] = parseInt(document.getElementById('setting-bonus-30').value) || 0;
 
             saveData();
             alert("Einstellungen erfolgreich gespeichert!");
             showSection('main');
         }
 
-        async function saveManualBalance() {
-            const newBal=parseInt(document.getElementById('setting-manual-balance').value);
-            if (isNaN(newBal)||newBal<0) return;
-            try {
-                const data=await apiPost({action:'setbalance',id:'balance-'+Date.now()+'-'+Math.random().toString(36).slice(2),balance:newBal});
-                appState.balance=data.status.kontostand; await syncFromGoogle(false); updateUI(); alert('Kontostand wurde angepasst.');
-            } catch(err) { alert('Kontostand konnte nicht gespeichert werden: '+err.message); }
-        }
+        async function saveManualBalance(){const newBal=parseFloat(document.getElementById('setting-manual-balance').value);if(!Number.isFinite(newBal)||newBal<0)return;try{const data=await apiPost({action:'setbalance',id:'balance-'+Date.now()+'-'+Math.random().toString(36).slice(2),balance:newBal});appState.balance=Number(data.status.kontostand)||0;await syncFromGoogle(false);updateUI();alert('Kontostand wurde angepasst.');}catch(err){alert('Kontostand konnte nicht gespeichert werden: '+err.message);}}
 
         function confirmResetAll() {
             if (confirm("Möchtest du wirklich alle gespeicherten Daten und den Verlauf zurücksetzen?")) {
@@ -1062,15 +1043,9 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             }
         }
 
-        async function redeemTime(minutes) {
-            if (appState.balance < minutes) { alert(`Du hast leider nicht genügend Medienzeit! Du brauchst ${minutes} Minuten, hast aber nur ${appState.balance} Minuten.`); return; }
-            try {
-                const data=await apiPost({action:'redeem',entry:{id:'redeem-'+Date.now()+'-'+Math.random().toString(36).slice(2),minuten}});
-                appState.balance=data.status.kontostand;
-                appState.consecutiveLosses=data.status.nietenInFolge;
-                await syncFromGoogle(false); updateUI(); closeRedeemModal();
-                alert(`Viel Spaß! Du hast ${minutes} Minuten Medienzeit eingelöst.`);
-            } catch(err) { alert('Einlösen fehlgeschlagen: '+err.message); }
+        async function redeemTime(minutes){
+            if(appState.balance<minutes){alert(`Du hast leider nicht genügend Medienzeit! Du brauchst ${minutes} Minuten, hast aber nur ${appState.balance} Minuten.`);return;}
+            try{const data=await apiPost({action:'redeem',entry:{id:'redeem-'+Date.now()+'-'+Math.random().toString(36).slice(2),minuten}});appState.balance=Number(data.status.kontostand)||0;appState.consecutiveLosses=Number(data.status.nietenInFolge)||0;await syncFromGoogle(false);updateUI();closeRedeemModal();alert(`Viel Spaß! Du hast ${minutes} Minuten Medienzeit eingelöst.`);}catch(err){alert('Einlösen fehlgeschlagen: '+err.message);}
         }
 
         function triggerConfetti() {
