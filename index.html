@@ -858,14 +858,20 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 value.textContent = data.super > 0 ? `${data.total}m · ⭐${data.super}` : `${data.total}m`;
 
                 const track = document.createElement('div');
-                track.className = 'w-full max-w-[24px] bg-slate-100 rounded-t-lg flex flex-col-reverse h-24 overflow-hidden';
+                track.className = 'w-full max-w-[24px] bg-slate-100 rounded-t-lg overflow-hidden';
+                // Explizite CSS-Höhe statt Tailwind h-24, damit der Balken auch ohne diese Utility-Klasse sichtbar ist.
+                track.style.height = '96px';
+                track.style.display = 'flex';
+                track.style.flexDirection = 'column-reverse';
+                track.style.justifyContent = 'flex-start';
+                track.style.border = '1px solid #e2e8f0';
                 track.title = `${label}: ${data.total} Min${data.super ? `, davon ${data.super} Min Super` : ''}`;
 
                 Object.entries(data.subjects).forEach(([sub, amounts]) => {
                     [['normal', amounts.normal], ['super', amounts.super]].forEach(([kind, mins]) => {
                         if (!mins) return;
                         const seg = document.createElement('div');
-                        seg.style.height = `${(mins / scaleMax) * 100}%`;
+                        seg.style.height = `${Math.max(1, (mins / scaleMax) * 96)}px`;
                         seg.style.background = subjectColor(sub);
                         seg.style.flexShrink = '0';
                         if (kind === 'super') {
