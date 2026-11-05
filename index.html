@@ -129,15 +129,9 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
 
                 <hr class="border-slate-100">
 
-                <div class="flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5">
-                    <div>
-                        <div class="font-bold text-slate-800 text-sm">Lernqualität</div>
-                        <div id="quality-label" class="text-[11px] text-slate-500">Normal</div>
-                    </div>
-                    <button id="quality-toggle" type="button" onclick="toggleSuperQuality()" aria-pressed="false" class="relative w-20 h-9 rounded-full bg-slate-300 transition">
-                        <span id="quality-knob" class="absolute left-1 top-1 w-7 h-7 bg-white rounded-full shadow flex items-center justify-center transition">○</span>
-                    </button>
-                </div>
+                <button id="quality-button" type="button" onclick="toggleSuperQuality()" aria-pressed="false" class="w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition active:scale-[0.98]">
+                    ☆ Super-Lernsession aktivieren
+                </button>
 
                 <div>
                     <h2 class="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
@@ -649,15 +643,14 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
         }
         function updateQualityUI() {
             const on = !!appState.superQuality;
-            const toggle = document.getElementById('quality-toggle');
-            const knob = document.getElementById('quality-knob');
-            const label = document.getElementById('quality-label');
-            if (!toggle || !knob || !label) return;
-            toggle.setAttribute('aria-pressed', String(on));
-            toggle.style.background = on ? '#f59e0b' : '#cbd5e1';
-            knob.style.transform = on ? 'translateX(44px)' : 'translateX(0)';
-            knob.textContent = on ? '⭐' : '○';
-            label.textContent = on ? '⭐ Super-Lernsession' : 'Normal';
+            const button = document.getElementById('quality-button');
+            if (!button) return;
+            button.setAttribute('aria-pressed', String(on));
+            button.textContent = on ? '⭐ Super-Lernsession aktiv' : '☆ Super-Lernsession aktivieren';
+            button.style.background = on ? '#fffbeb' : '#ffffff';
+            button.style.borderColor = on ? '#f59e0b' : '#e2e8f0';
+            button.style.color = on ? '#b45309' : '#475569';
+            button.style.boxShadow = on ? '0 0 0 2px rgba(245,158,11,.12)' : 'none';
         }
 
         function renderLearningOptions() {
@@ -824,51 +817,87 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             monday.setDate(now.getDate() - dayOfWeek);
             monday.setHours(0,0,0,0);
 
-            const dayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-            const minutesPerDay = [0, 0, 0, 0, 0, 0, 0];
+            const dayLabels = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+            const dayData = Array.from({length:7}, () => ({ total:0, super:0, subjects:{} }));
             const subjectTotals = {};
             let weekTotal = 0;
+            let weekSuper = 0;
 
             appState.history.forEach(entry => {
-                if (!entry.timestamp) return;
+                if (!entry.timestamp || entry.type !== 'learn') return;
                 const d = new Date(entry.timestamp);
-                if (!Number.isNaN(d.getTime()) && d >= monday && entry.type === 'learn') {
-                    const diffDays = Math.floor((d - monday) / (1000 * 60 * 60 * 24));
-                    if (diffDays >= 0 && diffDays < 7) {
-                        minutesPerDay[diffDays] += entry.learnTime || 0;
-                        weekTotal += entry.learnTime || 0;
-
-                        const sub = entry.subject || 'Unbekannt';
-                        subjectTotals[sub] = (subjectTotals[sub] || 0) + entry.learnTime;
-                    }
-                }
+                if (Number.isNaN(d.getTime()) || d < monday) return;
+                const diffDays = Math.floor((d - monday) / 86400000);
+                if (diffDays < 0 || diffDays > 6) return;
+                const mins = Number(entry.learnTime) || 0;
+                const sub = entry.subject || 'Unbekannt';
+                const isSuper = entry.quality === 'Super';
+                dayData[diffDays].total += mins;
+                if (isSuper) { dayData[diffDays].super += mins; weekSuper += mins; }
+                if (!dayData[diffDays].subjects[sub]) dayData[diffDays].subjects[sub] = {normal:0, super:0};
+                dayData[diffDays].subjects[sub][isSuper ? 'super' : 'normal'] += mins;
+                subjectTotals[sub] = (subjectTotals[sub] || 0) + mins;
+                weekTotal += mins;
             });
 
-            document.getElementById('week-total-mins').innerText = `${weekTotal} Min Gesamt`;
+            const totalEl = document.getElementById('week-total-mins');
+            totalEl.innerText = `${weekTotal} Min Gesamt${weekSuper ? ` · ⭐ ${weekSuper} Min Super` : ''}`;
 
             const chartContainer = document.getElementById('week-chart-container');
             chartContainer.innerHTML = '';
-            const maxMin = Math.max(...minutesPerDay, 30);
+            const maxDay = Math.max(...dayData.map(d => d.total));
+            const scaleMax = Math.max(120, maxDay); // Standard 2 h, erst darüber dynamisch höher
 
             dayLabels.forEach((label, idx) => {
-                const val = minutesPerDay[idx];
-                const heightPct = Math.round((val / maxMin) * 100);
-
+                const data = dayData[idx];
                 const col = document.createElement('div');
-                col.className = 'flex flex-col items-center flex-1 group';
-                col.innerHTML = `
-                    <span class="text-[10px] text-slate-400 font-bold mb-1 opacity-0 group-hover:opacity-100 transition">${val}m</span>
-                    <div class="w-full max-w-[20px] bg-slate-100 rounded-t-lg flex items-end h-24 overflow-hidden">
-                        <div class="w-full bg-gradient-to-t from-indigo-500 to-blue-500 rounded-t-lg transition-all duration-500" style="height: ${heightPct}%"></div>
-                    </div>
-                    <span class="text-[10px] font-bold text-slate-600 mt-1">${label}</span>
-                `;
+                col.className = 'flex flex-col items-center flex-1 min-w-0';
+
+                const value = document.createElement('span');
+                value.className = 'text-[9px] text-slate-500 font-bold mb-1 whitespace-nowrap';
+                value.textContent = data.super > 0 ? `${data.total}m · ⭐${data.super}` : `${data.total}m`;
+
+                const track = document.createElement('div');
+                track.className = 'w-full max-w-[24px] bg-slate-100 rounded-t-lg flex flex-col-reverse h-24 overflow-hidden';
+                track.title = `${label}: ${data.total} Min${data.super ? `, davon ${data.super} Min Super` : ''}`;
+
+                Object.entries(data.subjects).forEach(([sub, amounts]) => {
+                    [['normal', amounts.normal], ['super', amounts.super]].forEach(([kind, mins]) => {
+                        if (!mins) return;
+                        const seg = document.createElement('div');
+                        seg.style.height = `${(mins / scaleMax) * 100}%`;
+                        seg.style.background = subjectColor(sub);
+                        seg.style.flexShrink = '0';
+                        if (kind === 'super') {
+                            seg.style.boxShadow = 'inset 0 0 0 2px #f59e0b';
+                            seg.style.position = 'relative';
+                        }
+                        seg.title = `${sub}: ${mins} Min${kind === 'super' ? ' ⭐ Super' : ''}`;
+                        track.appendChild(seg);
+                    });
+                });
+
+                const day = document.createElement('span');
+                day.className = 'text-[10px] font-bold text-slate-600 mt-1';
+                day.textContent = label;
+                col.append(value, track, day);
                 chartContainer.appendChild(col);
             });
 
-            const subContainer = document.getElementById('week-subjects-breakdown');
-            subContainer.innerHTML = '';
-            renderSubjectBreakdownList(subContainer, subjectTotals, weekTotal);
+            const breakdown = document.getElementById('subject-breakdown');
+            breakdown.innerHTML = '';
+            const sortedSubjects = Object.entries(subjectTotals).sort((a,b) => b[1]-a[1]);
+            if (!sortedSubjects.length) {
+                breakdown.innerHTML = '<p class="text-center text-slate-400 text-xs py-4">Diese Woche noch keine Lernzeit.</p>';
+                return;
+            }
+            sortedSubjects.forEach(([sub, mins]) => {
+                const pct = weekTotal ? Math.round((mins/weekTotal)*100) : 0;
+                const row = document.createElement('div');
+                row.className = 'mb-2';
+                row.innerHTML = `<div class="flex justify-between text-[10px] mb-1"><span class="font-bold text-slate-700">${sub}</span><span class="text-slate-500">${mins} Min · ${pct}%</span></div><div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div class="h-2 rounded-full" style="width:${pct}%;background:${subjectColor(sub)}"></div></div>`;
+                breakdown.appendChild(row);
+            });
         }
 
         function renderMonthStats() {
