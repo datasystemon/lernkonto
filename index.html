@@ -884,7 +884,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 chartContainer.appendChild(col);
             });
 
-            const breakdown = document.getElementById('subject-breakdown');
+            const breakdown = document.getElementById('week-subjects-breakdown');
             breakdown.innerHTML = '';
             const sortedSubjects = Object.entries(subjectTotals).sort((a,b) => b[1]-a[1]);
             if (!sortedSubjects.length) {
