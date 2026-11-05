@@ -129,6 +129,16 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
 
                 <hr class="border-slate-100">
 
+                <div class="flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                    <div>
+                        <div class="font-bold text-slate-800 text-sm">Lernqualität</div>
+                        <div id="quality-label" class="text-[11px] text-slate-500">Normal</div>
+                    </div>
+                    <button id="quality-toggle" type="button" onclick="toggleSuperQuality()" aria-pressed="false" class="relative w-20 h-9 rounded-full bg-slate-300 transition">
+                        <span id="quality-knob" class="absolute left-1 top-1 w-7 h-7 bg-white rounded-full shadow flex items-center justify-center transition">○</span>
+                    </button>
+                </div>
+
                 <div>
                     <h2 class="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
                         <span class="text-emerald-500 text-sm">◷</span>
@@ -450,7 +460,8 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 }
             },
             history: [],
-            activeSession: null
+            activeSession: null,
+            superQuality: false
         };
 
         let appState = loadData();
@@ -514,16 +525,35 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             if(!password){password=prompt('Familienpasswort für das Lernkonto:')||'';if(password)localStorage.setItem(PASSWORD_KEY,password);}
             return password;
         }
-        function parseSheetTimestamp(datum,uhrzeit){
-            const m=String(datum||'').match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-            if(!m)return new Date().toISOString();
-            return `${m[3]}-${m[2]}-${m[1]}T${uhrzeit||'00:00'}:00`;
+        function parseSheetTimestamp(datum, uhrzeit) {
+            const ds = String(datum || '').trim();
+            const ts = String(uhrzeit || '').trim();
+
+            // Preferred format from our sheet: dd.MM.yyyy + HH:mm
+            let m = ds.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+            if (m) {
+                const hhmm = (ts.match(/^(\d{1,2}):(\d{2})/) || ['', '0', '00']);
+                return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(hhmm[1]), Number(hhmm[2]), 0, 0).toISOString();
+            }
+
+            // Apps Script can return date cells as ISO/date strings.
+            const direct = new Date(ds);
+            if (!Number.isNaN(direct.getTime())) {
+                if (ts) {
+                    const hm = ts.match(/(\d{1,2}):(\d{2})/);
+                    if (hm) direct.setHours(Number(hm[1]), Number(hm[2]), 0, 0);
+                }
+                return direct.toISOString();
+            }
+
+            console.warn('Ungültiges Datum aus Google Sheets:', datum, uhrzeit);
+            return null;
         }
         function mapServerEntry(e){
             const timestamp=parseSheetTimestamp(e.datum,e.uhrzeit);
             if(e.typ==='Einlösung')return{id:e.id,timestamp,type:'redeem',usedMinutes:Math.abs(Number(e.standard)||0),balanceAfter:Number(e.kontostand)||0};
             if(e.typ==='Korrektur')return{id:e.id,timestamp,type:'adjust',balanceAfter:Number(e.kontostand)||0};
-            return{id:e.id,timestamp,type:'learn',learnTime:Number(e.lernzeit)||0,subject:e.fach,won:(Number(e.bonus)||0)>0,bonusWon:Number(e.bonus)||0,standardWon:Number(e.standard)||0,drawResult:e.wuerfelergebnis||'',balanceAfter:Number(e.kontostand)||0};
+            return{id:e.id,timestamp,type:'learn',learnTime:Number(e.lernzeit)||0,subject:e.fach,won:(Number(e.bonus)||0)>0,bonusWon:Number(e.bonus)||0,standardWon:Number(e.standard)||0,quality:String(e.qualitaet||'Normal'),superBonus:Number(e.superbonus)||0,drawResult:e.wuerfelergebnis||'',balanceAfter:Number(e.kontostand)||0};
         }
         async function syncFromGoogle(showErrors=false){
             const password=getFamilyPassword();if(!password)return false;
@@ -539,7 +569,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
         async function apiPost(payload){payload.password=getFamilyPassword();const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});const data=await r.json();if(!data.ok)throw new Error(data.error||'Speichern fehlgeschlagen');return data;}
 
         // --- 3. UI RENDERER & NAVIGATION ---
-        function showSection(sectionId) {
+        async function showSection(sectionId) {
             document.getElementById('section-main').classList.add('hidden');
             document.getElementById('section-draw').classList.add('hidden');
             document.getElementById('section-history').classList.add('hidden');
@@ -547,6 +577,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
 
             document.getElementById(`section-${sectionId}`).classList.remove('hidden');
 
+            if (sectionId === 'history') await syncFromGoogle(false);
             updateUI();
         }
 
@@ -559,6 +590,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
 
             renderSubjectSelector();
             renderLearningOptions();
+            updateQualityUI();
             renderHistoryView();
         }
 
@@ -609,6 +641,25 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             });
         }
 
+        function toggleSuperQuality() {
+            appState.superQuality = !appState.superQuality;
+            updateQualityUI();
+            renderLearningOptions();
+            saveData();
+        }
+        function updateQualityUI() {
+            const on = !!appState.superQuality;
+            const toggle = document.getElementById('quality-toggle');
+            const knob = document.getElementById('quality-knob');
+            const label = document.getElementById('quality-label');
+            if (!toggle || !knob || !label) return;
+            toggle.setAttribute('aria-pressed', String(on));
+            toggle.style.background = on ? '#f59e0b' : '#cbd5e1';
+            knob.style.transform = on ? 'translateX(44px)' : 'translateX(0)';
+            knob.textContent = on ? '⭐' : '○';
+            label.textContent = on ? '⭐ Super-Lernsession' : 'Normal';
+        }
+
         function renderLearningOptions() {
             const container = document.getElementById('learning-options-container');
             container.innerHTML = '';
@@ -627,7 +678,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
 
                 const btn = document.createElement('button');
                 btn.className = `learning-option border-2 rounded-2xl p-3.5 transition flex items-center justify-between shadow-sm active:scale-[0.98]`;
-                btn.style.backgroundColor = hexToRgba(color,.08); btn.style.borderColor = hexToRgba(color,.35);
+                btn.style.backgroundColor = hexToRgba(color,.08); btn.style.borderColor = appState.superQuality ? '#f59e0b' : hexToRgba(color,.35); btn.style.boxShadow = appState.superQuality ? '0 0 0 2px rgba(245,158,11,.18)' : '';
                 btn.onclick = () => startSession(minutes, bonus);
 
                 btn.innerHTML = `
@@ -636,7 +687,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                             ${minutes}m
                         </div>
                         <div class="text-left">
-                            <span class="block font-bold text-slate-800 text-sm">${minutes} Minuten gelernt</span>
+                            <span class="block font-bold text-slate-800 text-sm">${appState.superQuality ? '⭐ ' : ''}${minutes} Minuten gelernt</span>
                             <span class="text-[11px] text-slate-500">Fach: <b>${appState.selectedSubject}</b></span>
                         </div>
                     </div>
@@ -658,8 +709,12 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 learnTime: minutes,
                 subject: appState.selectedSubject,
                 potentialBonus: bonus,
-                drawn: false
+                drawn: false,
+                quality: appState.superQuality ? 'Super' : 'Normal'
             };
+            appState.superQuality = false;
+            updateQualityUI();
+            renderLearningOptions();
             saveData();
 
             setupDrawPage(minutes, appState.selectedSubject);
@@ -694,20 +749,23 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             const btn=document.getElementById('btn-draw');btn.disabled=true;document.getElementById('draw-state-ready').classList.add('hidden');document.getElementById('draw-state-anim').classList.remove('hidden');
             const session={...appState.activeSession};const started=Date.now();
             try{
-                const data=await apiPost({action:'learn',entry:{id:String(session.id),fach:session.subject,lernzeit:session.learnTime}});
+                const data=await apiPost({action:'learn',entry:{id:String(session.id),fach:session.subject,lernzeit:session.learnTime,qualitaet:session.quality||'Normal'}});
                 const wait=Math.max(0,1500-(Date.now()-started));await new Promise(r=>setTimeout(r,wait));
                 const res=data.result||{};
+                const hasSuper = !!res.superwurfAusgefuehrt;
                 if(res.zusatzwurf){const p=document.querySelector('#draw-state-anim p');p.innerText='Zusatzwurf! Noch einmal würfeln...';await new Promise(r=>setTimeout(r,1500));p.innerText='Bonus wird ermittelt...';}
                 appState.activeSession.drawn=true;appState.balance=Number(data.status.kontostand)||0;appState.consecutiveLosses=Number(data.status.nietenInFolge)||0;await syncFromGoogle(false);
                 document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-result').classList.remove('hidden');
                 const title=document.getElementById('result-title'),desc=document.getElementById('result-desc'),icon=document.getElementById('result-icon');const standard=Number(res.standard)||0,bonus=Number(res.bonus)||0;
                 icon.innerText=res.zusatzwurf?(bonus>0?'🎲🎉':'🎲👍'):(bonus>0?'🎉':'👍');title.innerText=`+${formatMinutes(standard)} Standard${bonus>0?' +'+formatMinutes(bonus)+' Bonus':''}`;title.className='text-xl font-bold '+(bonus>0?'text-emerald-600':'text-slate-700')+' font-kids';desc.innerText=res.wuerfelergebnis||'Diesmal kein Würfelbonus.';if(bonus>0)triggerConfetti();
+                if(hasSuper){await new Promise(r=>setTimeout(r,650));document.getElementById('draw-state-result').classList.add('hidden');document.getElementById('draw-state-anim').classList.remove('hidden');const ap=document.querySelector('#draw-state-anim p');ap.innerText='⭐ Superwurf...';await new Promise(r=>setTimeout(r,750));document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-result').classList.remove('hidden');icon.innerText=res.superGewonnen?'⭐🎉':'⭐👍';title.innerText=res.superGewonnen?`Superwurf gewonnen! +${formatMinutes(res.superbonus)} Min`:'Superwurf: diesmal kein Bonus';title.className='text-xl font-bold '+(res.superGewonnen?'text-amber-600':'text-slate-700')+' font-kids';desc.innerText=res.superErgebnis||'';if(res.superGewonnen)triggerConfetti();}
                 btn.classList.add('hidden');document.getElementById('btn-next-session').classList.remove('hidden');updateUI();
             }catch(err){document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-ready').classList.remove('hidden');btn.disabled=false;alert('Speichern fehlgeschlagen: '+err.message+'\nEs wurde nichts gebucht.');}
         }
         function formatMinutes(v){return Number(v).toLocaleString('de-DE',{maximumFractionDigits:1});}
         function resetToMain() {
             appState.activeSession = null;
+            appState.superQuality = false;
             saveData();
             showSection('main');
         }
@@ -749,7 +807,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             list.innerHTML = '';
 
             const todayStr = new Date().toDateString();
-            const todayEntries = appState.history.filter(e => new Date(e.timestamp).toDateString() === todayStr);
+            const todayEntries = appState.history.filter(e => e.timestamp && !Number.isNaN(new Date(e.timestamp).getTime()) && new Date(e.timestamp).toDateString() === todayStr);
 
             if (todayEntries.length === 0) {
                 list.innerHTML = `<p class="text-center text-slate-400 text-xs py-6">Heute noch keine Aktivitäten.</p>`;
@@ -772,8 +830,9 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             let weekTotal = 0;
 
             appState.history.forEach(entry => {
+                if (!entry.timestamp) return;
                 const d = new Date(entry.timestamp);
-                if (d >= monday && entry.type === 'learn') {
+                if (!Number.isNaN(d.getTime()) && d >= monday && entry.type === 'learn') {
                     const diffDays = Math.floor((d - monday) / (1000 * 60 * 60 * 24));
                     if (diffDays >= 0 && diffDays < 7) {
                         minutesPerDay[diffDays] += entry.learnTime || 0;
@@ -822,8 +881,9 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             const subjectTotals = {};
 
             appState.history.forEach(entry => {
+                if (!entry.timestamp) return;
                 const d = new Date(entry.timestamp);
-                if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+                if (!Number.isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
                     if (entry.type === 'learn') {
                         monthLearned += entry.learnTime || 0;
                         monthBonus += entry.bonusWon || 0;
@@ -872,7 +932,10 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             const dateObj = new Date(entry.timestamp);
             const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const item = document.createElement('div');
-            item.className = "flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs";
+            const isSuper = entry.type === 'learn' && entry.quality === 'Super';
+            item.className = "flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border text-xs";
+            item.style.borderColor = isSuper ? "#f59e0b" : "#e2e8f0";
+            if (isSuper) item.style.boxShadow = "inset 3px 0 0 #f59e0b";
 
             if (entry.type === 'learn') {
                 item.innerHTML = `
@@ -881,13 +944,13 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                             <span class="">●</span>
                         </div>
                         <div>
-                            <p class="font-bold text-slate-700">${entry.learnTime} Min ${entry.subject || ''}</p>
+                            <p class="font-bold text-slate-700">${isSuper ? '⭐ ' : ''}${entry.learnTime} Min ${entry.subject || ''}</p>
                             <p class="text-[10px] text-slate-400">${timeStr} Uhr</p>
                         </div>
                     </div>
                     <div class="text-right">
                         <span class="font-bold block ${entry.won ? 'text-emerald-600' : 'text-slate-400'}">
-                            ${entry.won ? `+${entry.bonusWon} Min Bonus` : 'Kein Bonus'}
+                            ${entry.won ? `+${entry.bonusWon} Min Bonus` : 'Kein Bonus'}${entry.superBonus > 0 ? ` + ⭐${entry.superBonus}` : ''}
                         </span>
                         <span class="text-[10px] text-slate-400">Stand: ${entry.balanceAfter} Min</span>
                     </div>
