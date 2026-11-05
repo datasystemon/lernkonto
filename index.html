@@ -118,10 +118,13 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             <!-- Fächerauswahl & Lernzeit -->
             <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
                 <div>
-                    <h2 class="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                        <span class="text-indigo-500 text-sm">🎓</span>
-                        1. Was hast du gelernt?
-                    </h2>
+                    <div class="flex items-center justify-between mb-2.5">
+                        <h2 class="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <span class="text-indigo-500 text-sm">🎓</span>
+                            1. Was hast du gelernt?
+                        </h2>
+                        <button type="button" onclick="showRewardHelp()" aria-label="Belohnungssystem erklären" class="w-7 h-7 rounded-full border border-slate-300 bg-white text-slate-600 font-bold">?</button>
+                    </div>
                     <div id="subject-selector-container" class="flex flex-wrap gap-2">
                         <!-- Dynamische Fach-Buttons -->
                     </div>
@@ -249,9 +252,12 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             <!-- Content Woche -->
             <div id="stats-view-week" class="hidden space-y-4">
                 <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3">
-                    <div class="flex justify-between items-center">
+                    <div class="space-y-1">
                         <h3 class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Diese Woche</h3>
-                        <span id="week-total-mins" class="text-xs font-bold bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full">0 Min</span>
+                        <div id="week-total-mins" class="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-2 rounded-xl leading-5">
+                            <div>0 Min Gesamt</div>
+                            <div class="text-amber-700">⭐ 0 Min Super</div>
+                        </div>
                     </div>
                     <!-- Balkendiagramm Wochentage -->
                     <div id="week-chart-container" class="flex justify-between items-end h-32 pt-4 px-1 border-b border-slate-100">
@@ -455,7 +461,8 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             },
             history: [],
             activeSession: null,
-            superQuality: false
+            superQuality: false,
+            streaks: {}
         };
 
         let appState = loadData();
@@ -547,7 +554,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             const timestamp=parseSheetTimestamp(e.datum,e.uhrzeit);
             if(e.typ==='Einlösung')return{id:e.id,timestamp,type:'redeem',usedMinutes:Math.abs(Number(e.standard)||0),balanceAfter:Number(e.kontostand)||0};
             if(e.typ==='Korrektur')return{id:e.id,timestamp,type:'adjust',balanceAfter:Number(e.kontostand)||0};
-            return{id:e.id,timestamp,type:'learn',learnTime:Number(e.lernzeit)||0,subject:e.fach,won:(Number(e.bonus)||0)>0,bonusWon:Number(e.bonus)||0,standardWon:Number(e.standard)||0,quality:String(e.qualitaet||'Normal'),superBonus:Number(e.superbonus)||0,drawResult:e.wuerfelergebnis||'',balanceAfter:Number(e.kontostand)||0};
+            return{id:e.id,timestamp,type:'learn',learnTime:Number(e.lernzeit)||0,subject:e.fach,won:(Number(e.bonus)||0)>0,bonusWon:Number(e.bonus)||0,standardWon:Number(e.standard)||0,quality:String(e.qualitaet||'Normal'),superBonus:Number(e.superbonus)||0,streak:Number(e.streak)||0,streakBonus:Number(e.streakbonus)||0,drawResult:e.wuerfelergebnis||'',balanceAfter:Number(e.kontostand)||0};
         }
         async function syncFromGoogle(showErrors=false){
             const password=getFamilyPassword();if(!password)return false;
@@ -555,7 +562,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 const r=await fetch(API_URL+'?password='+encodeURIComponent(password),{cache:'no-store'});const data=await r.json();
                 if(!data.ok)throw new Error(data.error||'Synchronisierung fehlgeschlagen');
                 appState.balance=Number(data.status.kontostand)||0;appState.consecutiveLosses=Number(data.status.nietenInFolge)||0;
-                appState.history=(data.entries||[]).slice().reverse().map(mapServerEntry);
+                appState.history=(data.entries||[]).slice().reverse().map(mapServerEntry);appState.streaks=data.streaks||{};
                 if(data.config){appState.settings.winRate=data.config.gewinnchanceProzent??50;appState.settings.maxDailyBonus=data.config.maxTagesbonus??30;appState.settings.tierBonuses=data.config.bonusStufen||appState.settings.tierBonuses;}
                 saveData();updateUI();return true;
             }catch(err){console.error(err);if(showErrors){localStorage.removeItem(PASSWORD_KEY);alert('Google-Synchronisierung fehlgeschlagen: '+err.message+'\nBeim nächsten Laden wird das Passwort erneut abgefragt.');}return false;}
@@ -627,12 +634,20 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 btn.style.backgroundColor = isSelected ? color : hexToRgba(color,.11);
                 btn.style.color = isSelected ? '#fff' : color;
                 btn.style.border = `1px solid ${hexToRgba(color,.35)}`;
+                const streakInfo = appState.streaks[subject] || {};
+                const streak = Number(streakInfo.streak) || 0;
+                const bonusPotential = Number(streakInfo.bonusPotential) || 0;
+                const streakText = streak > 0 ? ` 🔥${streak}${bonusPotential ? ` +${bonusPotential}` : ''}` : '';
                 btn.innerHTML = `
                     <span class="${isSelected ? 'fa-check-circle' : 'fa-book-bookmark'}">✓</span>
-                    <span>${subject}</span>
+                    <span>${subject}${streakText}</span>
                 `;
                 container.appendChild(btn);
             });
+        }
+
+        function showRewardHelp() {
+            alert('🔥 Lernserie\nMindestens 10 Minuten pro Tag im selben Fach. Ab Tag 4 gibt es bei einem gewonnenen normalen Wurf +1 Minute, ab Tag 7 +2 Minuten. Der Streakbonus wird je Fach höchstens einmal am Tag ausgezahlt. Ein ausgelassener Tag beendet die Serie.\n\n⭐ Super-Lernsession\nZusätzlicher Superwurf: 10/15 Minuten können +1 Minute gewinnen, 20/25/30 Minuten +2 Minuten. Der Superwurf zählt nicht zur Nietenserie.\n\n🎲 Nietenserie\nNach 4 normalen Nieten folgt sofort ein normaler Zusatzwurf.');
         }
 
         function toggleSuperQuality() {
@@ -720,9 +735,9 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             document.getElementById('draw-subject-name').innerText = subject;
             document.getElementById('draw-possible-bonus').innerText = `+${bonus} Min`;
 
-            // Zeige Hinweis auf garantierten Bonus nach 3 Fehlversuchen
+            // Zeige Hinweis auf Zusatzwurf nach 4 normalen Nieten
             const badge = document.getElementById('guaranteed-bonus-badge');
-            if (appState.consecutiveLosses >= 3) {
+            if (appState.consecutiveLosses >= 4) {
                 badge.classList.remove('hidden');
             } else {
                 badge.classList.add('hidden');
@@ -749,8 +764,8 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 if(res.zusatzwurf){const p=document.querySelector('#draw-state-anim p');p.innerText='Zusatzwurf! Noch einmal würfeln...';await new Promise(r=>setTimeout(r,1500));p.innerText='Bonus wird ermittelt...';}
                 appState.activeSession.drawn=true;appState.balance=Number(data.status.kontostand)||0;appState.consecutiveLosses=Number(data.status.nietenInFolge)||0;await syncFromGoogle(false);
                 document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-result').classList.remove('hidden');
-                const title=document.getElementById('result-title'),desc=document.getElementById('result-desc'),icon=document.getElementById('result-icon');const standard=Number(res.standard)||0,bonus=Number(res.bonus)||0;
-                icon.innerText=res.zusatzwurf?(bonus>0?'🎲🎉':'🎲👍'):(bonus>0?'🎉':'👍');title.innerText=`+${formatMinutes(standard)} Standard${bonus>0?' +'+formatMinutes(bonus)+' Bonus':''}`;title.className='text-xl font-bold '+(bonus>0?'text-emerald-600':'text-slate-700')+' font-kids';desc.innerText=res.wuerfelergebnis||'Diesmal kein Würfelbonus.';if(bonus>0)triggerConfetti();
+                const title=document.getElementById('result-title'),desc=document.getElementById('result-desc'),icon=document.getElementById('result-icon');const standard=Number(res.standard)||0,bonus=Number(res.bonus)||0,streakBonus=Number(res.streakbonus)||0;
+                icon.innerText=res.zusatzwurf?(bonus>0?'🎲🎉':'🎲👍'):(bonus>0?'🎉':'👍');title.innerText=`+${formatMinutes(standard)} Standard${bonus>0?' +'+formatMinutes(bonus)+' Bonus':''}${streakBonus>0?' +🔥'+formatMinutes(streakBonus):''}`;title.className='text-xl font-bold '+(bonus>0?'text-emerald-600':'text-slate-700')+' font-kids';desc.innerText=res.wuerfelergebnis||'Diesmal kein Würfelbonus.';if(bonus>0)triggerConfetti();
                 if(hasSuper){await new Promise(r=>setTimeout(r,650));document.getElementById('draw-state-result').classList.add('hidden');document.getElementById('draw-state-anim').classList.remove('hidden');const ap=document.querySelector('#draw-state-anim p');ap.innerText='⭐ Superwurf...';await new Promise(r=>setTimeout(r,750));document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-result').classList.remove('hidden');icon.innerText=res.superGewonnen?'⭐🎉':'⭐👍';title.innerText=res.superGewonnen?`Superwurf gewonnen! +${formatMinutes(res.superbonus)} Min`:'Superwurf: diesmal kein Bonus';title.className='text-xl font-bold '+(res.superGewonnen?'text-amber-600':'text-slate-700')+' font-kids';desc.innerText=res.superErgebnis||'';if(res.superGewonnen)triggerConfetti();}
                 btn.classList.add('hidden');document.getElementById('btn-next-session').classList.remove('hidden');updateUI();
             }catch(err){document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-ready').classList.remove('hidden');btn.disabled=false;alert('Speichern fehlgeschlagen: '+err.message+'\nEs wurde nichts gebucht.');}
@@ -841,7 +856,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             });
 
             const totalEl = document.getElementById('week-total-mins');
-            totalEl.innerText = `${weekTotal} Min Gesamt${weekSuper ? ` · ⭐ ${weekSuper} Min Super` : ''}`;
+            totalEl.innerHTML = `<div>${weekTotal} Min Gesamt</div><div class="text-amber-700">⭐ ${weekSuper} Min Super</div>`;
 
             const chartContainer = document.getElementById('week-chart-container');
             chartContainer.innerHTML = '';
@@ -854,8 +869,8 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 col.className = 'flex flex-col items-center flex-1 min-w-0';
 
                 const value = document.createElement('span');
-                value.className = 'text-[9px] text-slate-500 font-bold mb-1 whitespace-nowrap';
-                value.textContent = data.super > 0 ? `${data.total}m · ⭐${data.super}` : `${data.total}m`;
+                value.className = 'text-[9px] text-slate-500 font-bold mb-1 text-center leading-3 min-h-[24px]';
+                value.innerHTML = `<span class="block">${data.total}m</span>${data.super > 0 ? `<span class="block text-amber-600">⭐${data.super}</span>` : '<span class="block">&nbsp;</span>'}`;
 
                 const track = document.createElement('div');
                 track.className = 'w-full max-w-[24px] bg-slate-100 rounded-t-lg overflow-hidden';
@@ -979,13 +994,13 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                             <span class="">●</span>
                         </div>
                         <div>
-                            <p class="font-bold text-slate-700">${isSuper ? '⭐ ' : ''}${entry.learnTime} Min ${entry.subject || ''}</p>
+                            <p class="font-bold text-slate-700">${isSuper ? '⭐ ' : ''}${entry.learnTime} Min ${entry.subject || ''}${entry.streak ? ` · 🔥${entry.streak}` : ''}</p>
                             <p class="text-[10px] text-slate-400">${timeStr} Uhr</p>
                         </div>
                     </div>
                     <div class="text-right">
                         <span class="font-bold block ${entry.won ? 'text-emerald-600' : 'text-slate-400'}">
-                            ${entry.won ? `+${entry.bonusWon} Min Bonus` : 'Kein Bonus'}${entry.superBonus > 0 ? ` + ⭐${entry.superBonus}` : ''}
+                            ${entry.won ? `+${entry.bonusWon} Min Bonus` : 'Kein Bonus'}${entry.streakBonus > 0 ? ` + 🔥${entry.streakBonus}` : ''}${entry.superBonus > 0 ? ` + ⭐${entry.superBonus}` : ''}
                         </span>
                         <span class="text-[10px] text-slate-400">Stand: ${entry.balanceAfter} Min</span>
                     </div>
