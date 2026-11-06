@@ -429,10 +429,12 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 <button onclick="redeemTime(15)" class="bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 font-bold py-3 rounded-xl text-sm text-slate-700 hover:text-emerald-700 transition">15 Min</button>
                 <button onclick="redeemTime(20)" class="bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 font-bold py-3 rounded-xl text-sm text-slate-700 hover:text-emerald-700 transition">20 Min</button>
                 <button onclick="redeemTime(30)" class="bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 font-bold py-3 rounded-xl text-sm text-slate-700 hover:text-emerald-700 transition">30 Min</button>
-                <div class="col-span-3 flex gap-2 items-center mt-1">
-                    <label for="redeem-custom-minutes" class="sr-only">Eigene Minuten</label>
-                    <input id="redeem-custom-minutes" type="number" inputmode="numeric" min="1" step="1" placeholder="Eigene Minuten" class="flex-1 min-w-0 bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-emerald-400">
-                    <button type="button" onclick="redeemCustomTime()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-3 rounded-xl text-sm transition">Einlösen</button>
+                <button type="button" onclick="showCustomRedeem()" class="bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 font-bold py-3 rounded-xl text-sm text-emerald-700 transition">✎ Eigene Zeit</button>
+                <div id="redeem-custom-row" class="hidden col-span-3">
+                    <div class="flex gap-2 mt-1">
+                        <input id="redeem-custom-minutes" type="number" inputmode="numeric" min="1" step="1" placeholder="z. B. 12 Minuten" class="flex-1 min-w-0 bg-white border border-emerald-300 rounded-xl px-3 py-3 text-sm outline-none">
+                        <button type="button" onclick="redeemCustomTime()" class="bg-emerald-600 text-white font-bold px-4 py-3 rounded-xl text-sm">Einlösen</button>
+                    </div>
                 </div>
                 <button onclick="closeRedeemModal()" class="col-span-3 bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold py-3 rounded-xl text-xs transition">Abbrechen</button>
             </div>
@@ -1149,8 +1151,8 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
         function openRedeemModal() {
             const modal = document.getElementById('modal-redeem');
             if (modal) {
+                const customRow=document.getElementById('redeem-custom-row'); if(customRow) customRow.classList.add('hidden');
                 document.getElementById('redeem-balance-display').innerText = `${appState.balance} Min`;
-                const ci=document.getElementById('redeem-custom-minutes'); if(ci) ci.value='';
                 modal.classList.remove('hidden');
             }
         }
@@ -1162,14 +1164,17 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             }
         }
 
+        function showCustomRedeem(){
+            const row=document.getElementById('redeem-custom-row');
+            const input=document.getElementById('redeem-custom-minutes');
+            if(row) row.classList.remove('hidden');
+            if(input){input.value='';input.focus();}
+        }
+
         async function redeemCustomTime(){
             const input=document.getElementById('redeem-custom-minutes');
             const amount=Number(input?.value);
-            if(!Number.isInteger(amount)||amount<=0){
-                alert('Bitte ganze Minuten größer 0 eingeben.');
-                if(input) input.focus();
-                return;
-            }
+            if(!Number.isInteger(amount)||amount<=0){alert('Bitte ganze Minuten größer 0 eingeben.');return;}
             await redeemTime(amount);
         }
 
