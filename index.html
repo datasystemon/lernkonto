@@ -429,7 +429,12 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 <button onclick="redeemTime(15)" class="bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 font-bold py-3 rounded-xl text-sm text-slate-700 hover:text-emerald-700 transition">15 Min</button>
                 <button onclick="redeemTime(20)" class="bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 font-bold py-3 rounded-xl text-sm text-slate-700 hover:text-emerald-700 transition">20 Min</button>
                 <button onclick="redeemTime(30)" class="bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 font-bold py-3 rounded-xl text-sm text-slate-700 hover:text-emerald-700 transition">30 Min</button>
-                <button onclick="closeRedeemModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold py-3 rounded-xl text-xs transition">Abbrechen</button>
+                <div class="col-span-3 flex gap-2 items-center mt-1">
+                    <label for="redeem-custom-minutes" class="sr-only">Eigene Minuten</label>
+                    <input id="redeem-custom-minutes" type="number" inputmode="numeric" min="1" step="1" placeholder="Eigene Minuten" class="flex-1 min-w-0 bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-emerald-400">
+                    <button type="button" onclick="redeemCustomTime()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-3 rounded-xl text-sm transition">Einlösen</button>
+                </div>
+                <button onclick="closeRedeemModal()" class="col-span-3 bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold py-3 rounded-xl text-xs transition">Abbrechen</button>
             </div>
         </div>
     </div>
@@ -1145,6 +1150,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             const modal = document.getElementById('modal-redeem');
             if (modal) {
                 document.getElementById('redeem-balance-display').innerText = `${appState.balance} Min`;
+                const ci=document.getElementById('redeem-custom-minutes'); if(ci) ci.value='';
                 modal.classList.remove('hidden');
             }
         }
@@ -1154,6 +1160,17 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             if (modal) {
                 modal.classList.add('hidden');
             }
+        }
+
+        async function redeemCustomTime(){
+            const input=document.getElementById('redeem-custom-minutes');
+            const amount=Number(input?.value);
+            if(!Number.isInteger(amount)||amount<=0){
+                alert('Bitte ganze Minuten größer 0 eingeben.');
+                if(input) input.focus();
+                return;
+            }
+            await redeemTime(amount);
         }
 
         async function redeemTime(minutes){
