@@ -252,15 +252,23 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             <!-- Content Woche -->
             <div id="stats-view-week" class="hidden space-y-4">
                 <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-3">
-                    <div class="space-y-1">
-                        <h3 class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Diese Woche</h3>
-                        <div id="week-total-mins" class="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-2 rounded-xl leading-5">
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <button type="button" onclick="changeWeek(-1)" class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold" aria-label="Vorherige Woche">‹</button>
+                            <div class="text-center">
+                                <h3 id="week-title" class="text-xs font-extrabold text-slate-700">Diese Woche</h3>
+                                <div id="week-range" class="text-[10px] text-slate-400">--</div>
+                            </div>
+                            <button type="button" onclick="changeWeek(1)" class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold" aria-label="Nächste Woche">›</button>
+                        </div>
+                        <button id="week-today-button" type="button" onclick="goToCurrentWeek()" class="hidden w-full text-[10px] font-bold text-indigo-600 py-1">Zur aktuellen Woche</button>
+                        <div id="week-total-mins" class="text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-2.5 rounded-xl leading-5">
                             <div>0 Min Gesamt</div>
                             <div class="text-amber-700">⭐ 0 Min Super</div>
                         </div>
                     </div>
                     <!-- Balkendiagramm Wochentage -->
-                    <div id="week-chart-container" class="flex justify-between items-end h-32 pt-4 px-1 border-b border-slate-100">
+                    <div id="week-chart-container" class="flex justify-between items-end pt-2 px-1 border-b border-slate-100" style="min-height:160px">
                         <!-- Dynamische Balken -->
                     </div>
                 </div>
@@ -436,6 +444,23 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
         </div>
     </div>
 
+
+    <!-- MODAL: BELohnungs-ZUSAMMENFASSUNG -->
+    <div id="modal-reward-summary" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-4">
+            <div class="text-center">
+                <div class="text-4xl">🏆</div>
+                <h3 class="font-kids text-xl font-bold text-slate-800 mt-1">Deine Belohnung</h3>
+                <p id="reward-summary-session" class="text-xs text-slate-500"></p>
+            </div>
+            <div id="reward-summary-lines" class="space-y-2 text-sm"></div>
+            <div class="rounded-2xl bg-indigo-50 px-4 py-3">
+                <div class="flex justify-between font-bold text-indigo-700"><span>Gesamt verdient</span><span id="reward-summary-total">+0 Min</span></div>
+                <div class="flex justify-between text-xs text-slate-500 mt-1"><span>Neuer Kontostand</span><span id="reward-summary-balance">0 Min</span></div>
+            </div>
+            <button type="button" onclick="closeRewardSummary()" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl">Fertig</button>
+        </div>
+    </div>
 
     <!-- JAVASCRIPT APP LOGIC -->
     <script>
@@ -755,23 +780,74 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
         }
 
         async function performDraw() {
-            if(!appState.activeSession||appState.activeSession.drawn){alert('Für diese Lernsession wurde die Bonusziehung bereits durchgeführt!');return;}
-            const btn=document.getElementById('btn-draw');btn.disabled=true;document.getElementById('draw-state-ready').classList.add('hidden');document.getElementById('draw-state-anim').classList.remove('hidden');
-            const session={...appState.activeSession};const started=Date.now();
-            try{
-                const data=await apiPost({action:'learn',entry:{id:String(session.id),fach:session.subject,lernzeit:session.learnTime,qualitaet:session.quality||'Normal'}});
-                const wait=Math.max(0,1500-(Date.now()-started));await new Promise(r=>setTimeout(r,wait));
-                const res=data.result||{};
-                const hasSuper = !!res.superwurfAusgefuehrt;
-                if(res.zusatzwurf){const p=document.querySelector('#draw-state-anim p');p.innerText='Zusatzwurf! Noch einmal würfeln...';await new Promise(r=>setTimeout(r,1500));p.innerText='Bonus wird ermittelt...';}
-                appState.activeSession.drawn=true;appState.balance=Number(data.status.kontostand)||0;appState.consecutiveLosses=Number(data.status.nietenInFolge)||0;await syncFromGoogle(false);
-                document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-result').classList.remove('hidden');
-                const title=document.getElementById('result-title'),desc=document.getElementById('result-desc'),icon=document.getElementById('result-icon');const standard=Number(res.standard)||0,bonus=Number(res.bonus)||0,streakBonus=Number(res.streakbonus)||0;
-                icon.innerText=res.zusatzwurf?(bonus>0?'🎲🎉':'🎲👍'):(bonus>0?'🎉':'👍');title.innerText=`+${formatMinutes(standard)} Standard${bonus>0?' +'+formatMinutes(bonus)+' Bonus':''}${streakBonus>0?' +🔥'+formatMinutes(streakBonus):''}`;title.className='text-xl font-bold '+(bonus>0?'text-emerald-600':'text-slate-700')+' font-kids';desc.innerText=res.wuerfelergebnis||'Diesmal kein Würfelbonus.';if(bonus>0)triggerConfetti();
-                if(hasSuper){await new Promise(r=>setTimeout(r,650));document.getElementById('draw-state-result').classList.add('hidden');document.getElementById('draw-state-anim').classList.remove('hidden');const ap=document.querySelector('#draw-state-anim p');ap.innerText='⭐ Superwurf...';await new Promise(r=>setTimeout(r,750));document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-result').classList.remove('hidden');icon.innerText=res.superGewonnen?'⭐🎉':'⭐👍';title.innerText=res.superGewonnen?`Superwurf gewonnen! +${formatMinutes(res.superbonus)} Min`:'Superwurf: diesmal kein Bonus';title.className='text-xl font-bold '+(res.superGewonnen?'text-amber-600':'text-slate-700')+' font-kids';desc.innerText=res.superErgebnis||'';if(res.superGewonnen)triggerConfetti();}
-                btn.classList.add('hidden');document.getElementById('btn-next-session').classList.remove('hidden');updateUI();
-            }catch(err){document.getElementById('draw-state-anim').classList.add('hidden');document.getElementById('draw-state-ready').classList.remove('hidden');btn.disabled=false;alert('Speichern fehlgeschlagen: '+err.message+'\nEs wurde nichts gebucht.');}
+            if (!appState.activeSession || appState.activeSession.drawn) {
+                alert('Für diese Lernsession wurde die Bonusziehung bereits durchgeführt!');
+                return;
+            }
+            const btn = document.getElementById('btn-draw');
+            btn.disabled = true;
+            document.getElementById('draw-state-ready').classList.add('hidden');
+            document.getElementById('draw-state-anim').classList.remove('hidden');
+            const session = {...appState.activeSession};
+            const started = Date.now();
+            try {
+                const data = await apiPost({action:'learn', entry:{id:String(session.id), fach:session.subject, lernzeit:session.learnTime, qualitaet:session.quality || 'Normal'}});
+                const wait = Math.max(0, 1500 - (Date.now() - started));
+                await new Promise(r => setTimeout(r, wait));
+                const res = data.result || {};
+                const animText = document.querySelector('#draw-state-anim p');
+                if (res.zusatzwurf) {
+                    animText.innerText = '🎲 Zusatzwurf...';
+                    await new Promise(r => setTimeout(r, 900));
+                }
+                if (res.superwurfAusgefuehrt) {
+                    animText.innerText = '⭐ Superwurf...';
+                    await new Promise(r => setTimeout(r, 700));
+                }
+                appState.activeSession.drawn = true;
+                appState.balance = Number(data.status.kontostand) || 0;
+                appState.consecutiveLosses = Number(data.status.nietenInFolge) || 0;
+                await syncFromGoogle(false);
+                document.getElementById('draw-state-anim').classList.add('hidden');
+                btn.classList.add('hidden');
+                showRewardSummary(session, res, data.status || {});
+            } catch (err) {
+                document.getElementById('draw-state-anim').classList.add('hidden');
+                document.getElementById('draw-state-ready').classList.remove('hidden');
+                btn.disabled = false;
+                alert('Speichern fehlgeschlagen: ' + err.message + '\nEs wurde nichts gebucht.');
+            }
         }
+
+        function rewardLine(icon, label, value, muted=false) {
+            return `<div class="flex justify-between items-center rounded-xl px-3 py-2 ${muted ? 'bg-slate-50 text-slate-500' : 'bg-emerald-50 text-slate-700'}"><span>${icon} ${label}</span><strong>${value}</strong></div>`;
+        }
+
+        function showRewardSummary(session, res, status) {
+            const standard = Number(res.standard) || 0;
+            const bonus = Number(res.bonus) || 0;
+            const streakBonus = Number(res.streakbonus) || 0;
+            const superBonus = Number(res.superbonus) || 0;
+            const total = Number(res.gesamtVerdient) || (standard + bonus + streakBonus + superBonus);
+            const lines = [];
+            lines.push(rewardLine('✅', 'Sicherer Verdienst', `+${formatMinutes(standard)} Min`));
+            lines.push(rewardLine('🎲', res.zusatzwurf ? `Normaler Wurf: ${res.wuerfelergebnis || ''}` : `Normaler Wurf: ${res.gewonnen ? 'Gewinn' : 'Niete'}`, bonus > 0 ? `+${formatMinutes(bonus)} Min` : '0 Min', bonus === 0));
+            if (res.zusatzwurf) lines.push(rewardLine('🎲', 'Zusatzwurf enthalten', res.gewonnen ? 'Gewinn' : 'Niete', !res.gewonnen));
+            if (Number(res.streak) > 0) lines.push(rewardLine('🔥', `Fachserie: ${res.streak} Tage`, streakBonus > 0 ? `+${formatMinutes(streakBonus)} Min` : 'heute 0 Min', streakBonus === 0));
+            if (res.superwurfAusgefuehrt) lines.push(rewardLine('⭐', `Superwurf: ${res.superGewonnen ? 'Gewinn' : 'Niete'}`, superBonus > 0 ? `+${formatMinutes(superBonus)} Min` : '0 Min', superBonus === 0));
+            document.getElementById('reward-summary-session').textContent = `${session.subject} · ${session.learnTime} Minuten${session.quality === 'Super' ? ' · ⭐ Super' : ''}`;
+            document.getElementById('reward-summary-lines').innerHTML = lines.join('');
+            document.getElementById('reward-summary-total').textContent = `+${formatMinutes(total)} Min`;
+            document.getElementById('reward-summary-balance').textContent = `${formatMinutes(Number(status.kontostand) || appState.balance)} Min`;
+            document.getElementById('modal-reward-summary').classList.remove('hidden');
+            if (total > standard) triggerConfetti();
+        }
+
+        function closeRewardSummary() {
+            document.getElementById('modal-reward-summary').classList.add('hidden');
+            resetToMain();
+        }
+
         function formatMinutes(v){return Number(v).toLocaleString('de-DE',{maximumFractionDigits:1});}
         function resetToMain() {
             appState.activeSession = null;
@@ -783,6 +859,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
 
         // --- 5. STATISTIK & VERLAUF ---
         let currentStatsTab = 'day';
+        let currentWeekOffset = 0;
 
         function switchStatsTab(tab) {
             currentStatsTab = tab;
@@ -827,15 +904,33 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             todayEntries.forEach(entry => list.appendChild(createHistoryItemEl(entry)));
         }
 
+        function changeWeek(delta) {
+            currentWeekOffset += delta;
+            renderWeekStats();
+        }
+
+        function goToCurrentWeek() {
+            currentWeekOffset = 0;
+            renderWeekStats();
+        }
+
         function renderWeekStats() {
             const now = new Date();
             const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1;
             const monday = new Date(now);
-            monday.setDate(now.getDate() - dayOfWeek);
+            monday.setDate(now.getDate() - dayOfWeek + currentWeekOffset * 7);
             monday.setHours(0,0,0,0);
+            const nextMonday = new Date(monday);
+            nextMonday.setDate(monday.getDate() + 7);
+            const sunday = new Date(nextMonday);
+            sunday.setDate(nextMonday.getDate() - 1);
+
+            document.getElementById('week-title').textContent = currentWeekOffset === 0 ? 'Diese Woche' : (currentWeekOffset === -1 ? 'Letzte Woche' : 'Ausgewählte Woche');
+            document.getElementById('week-range').textContent = `${monday.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})}–${sunday.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
+            document.getElementById('week-today-button').classList.toggle('hidden', currentWeekOffset === 0);
 
             const dayLabels = ['Mo','Di','Mi','Do','Fr','Sa','So'];
-            const dayData = Array.from({length:7}, () => ({ total:0, super:0, subjects:{} }));
+            const dayData = Array.from({length:7}, () => ({total:0, super:0, subjects:{}}));
             const subjectTotals = {};
             let weekTotal = 0;
             let weekSuper = 0;
@@ -843,79 +938,61 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             appState.history.forEach(entry => {
                 if (!entry.timestamp || entry.type !== 'learn') return;
                 const d = new Date(entry.timestamp);
-                if (Number.isNaN(d.getTime()) || d < monday) return;
-                const diffDays = Math.floor((d - monday) / 86400000);
-                if (diffDays < 0 || diffDays > 6) return;
+                if (Number.isNaN(d.getTime()) || d < monday || d >= nextMonday) return;
+                const idx = Math.floor((d - monday) / 86400000);
                 const mins = Number(entry.learnTime) || 0;
                 const sub = entry.subject || 'Unbekannt';
                 const isSuper = entry.quality === 'Super';
-                dayData[diffDays].total += mins;
-                if (isSuper) { dayData[diffDays].super += mins; weekSuper += mins; }
-                if (!dayData[diffDays].subjects[sub]) dayData[diffDays].subjects[sub] = {normal:0, super:0};
-                dayData[diffDays].subjects[sub][isSuper ? 'super' : 'normal'] += mins;
+                dayData[idx].total += mins;
+                if (isSuper) { dayData[idx].super += mins; weekSuper += mins; }
+                if (!dayData[idx].subjects[sub]) dayData[idx].subjects[sub] = {normal:0, super:0};
+                dayData[idx].subjects[sub][isSuper ? 'super' : 'normal'] += mins;
                 subjectTotals[sub] = (subjectTotals[sub] || 0) + mins;
                 weekTotal += mins;
             });
 
-            const totalEl = document.getElementById('week-total-mins');
-            totalEl.innerHTML = `<div>${weekTotal} Min Gesamt</div><div class="text-amber-700">⭐ ${weekSuper} Min Super</div>`;
-
-            const chartContainer = document.getElementById('week-chart-container');
-            chartContainer.innerHTML = '';
-            const maxDay = Math.max(...dayData.map(d => d.total));
-            const scaleMax = Math.max(120, maxDay); // Standard 2 h, erst darüber dynamisch höher
+            document.getElementById('week-total-mins').innerHTML = `<div>${weekTotal} Min Gesamt</div><div class="text-amber-700">⭐ ${weekSuper} Min Super</div>`;
+            const chart = document.getElementById('week-chart-container');
+            chart.innerHTML = '';
+            const scaleMax = Math.max(120, ...dayData.map(d => d.total));
 
             dayLabels.forEach((label, idx) => {
                 const data = dayData[idx];
                 const col = document.createElement('div');
-                col.className = 'flex flex-col items-center flex-1 min-w-0';
-
-                const value = document.createElement('span');
-                value.className = 'text-[9px] text-slate-500 font-bold mb-1 text-center leading-3 min-h-[24px]';
-                value.innerHTML = `<span class="block">${data.total}m</span>${data.super > 0 ? `<span class="block text-amber-600">⭐${data.super}</span>` : '<span class="block">&nbsp;</span>'}`;
-
+                col.style.cssText = 'display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;height:150px;justify-content:flex-end';
+                const values = document.createElement('div');
+                values.style.cssText = 'font-size:9px;line-height:12px;text-align:center;font-weight:700;min-height:30px;margin-bottom:4px;color:#64748b';
+                values.innerHTML = `<div>${data.total} Min</div><div style="color:#d97706;min-height:12px">${data.super ? `⭐ ${data.super}` : '&nbsp;'}</div>`;
                 const track = document.createElement('div');
-                track.className = 'w-full max-w-[24px] bg-slate-100 rounded-t-lg overflow-hidden';
-                // Explizite CSS-Höhe statt Tailwind h-24, damit der Balken auch ohne diese Utility-Klasse sichtbar ist.
-                track.style.height = '96px';
-                track.style.display = 'flex';
-                track.style.flexDirection = 'column-reverse';
-                track.style.justifyContent = 'flex-start';
-                track.style.border = '1px solid #e2e8f0';
-                track.title = `${label}: ${data.total} Min${data.super ? `, davon ${data.super} Min Super` : ''}`;
-
+                track.style.cssText = 'height:96px;width:24px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px 8px 0 0;display:flex;flex-direction:column-reverse;overflow:hidden;flex-shrink:0';
                 Object.entries(data.subjects).forEach(([sub, amounts]) => {
                     [['normal', amounts.normal], ['super', amounts.super]].forEach(([kind, mins]) => {
                         if (!mins) return;
                         const seg = document.createElement('div');
-                        seg.style.height = `${Math.max(1, (mins / scaleMax) * 96)}px`;
+                        seg.style.height = `${Math.max(1,(mins/scaleMax)*96)}px`;
                         seg.style.background = subjectColor(sub);
                         seg.style.flexShrink = '0';
-                        if (kind === 'super') {
-                            seg.style.boxShadow = 'inset 0 0 0 2px #f59e0b';
-                            seg.style.position = 'relative';
-                        }
+                        if (kind === 'super') seg.style.boxShadow = 'inset 0 0 0 2px #f59e0b';
                         seg.title = `${sub}: ${mins} Min${kind === 'super' ? ' ⭐ Super' : ''}`;
                         track.appendChild(seg);
                     });
                 });
-
-                const day = document.createElement('span');
-                day.className = 'text-[10px] font-bold text-slate-600 mt-1';
+                const day = document.createElement('div');
+                day.style.cssText = 'font-size:10px;font-weight:700;color:#475569;margin-top:4px';
                 day.textContent = label;
-                col.append(value, track, day);
-                chartContainer.appendChild(col);
+                col.append(values, track, day);
+                chart.appendChild(col);
             });
 
             const breakdown = document.getElementById('week-subjects-breakdown');
             breakdown.innerHTML = '';
-            const sortedSubjects = Object.entries(subjectTotals).sort((a,b) => b[1]-a[1]);
-            if (!sortedSubjects.length) {
-                breakdown.innerHTML = '<p class="text-center text-slate-400 text-xs py-4">Diese Woche noch keine Lernzeit.</p>';
+            const sorted = Object.entries(subjectTotals).sort((a,b) => b[1]-a[1]);
+            if (!sorted.length) {
+                breakdown.innerHTML = '<p class="text-center text-slate-400 text-xs py-4">In dieser Woche keine Lernzeit.</p>';
                 return;
             }
-            sortedSubjects.forEach(([sub, mins]) => {
-                const pct = weekTotal ? Math.round((mins/weekTotal)*100) : 0;
+            sorted.forEach(([sub, mins]) => {
+                const pct = weekTotal ? Math.round(mins/weekTotal*100) : 0;
                 const row = document.createElement('div');
                 row.className = 'mb-2';
                 row.innerHTML = `<div class="flex justify-between text-[10px] mb-1"><span class="font-bold text-slate-700">${sub}</span><span class="text-slate-500">${mins} Min · ${pct}%</span></div><div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div class="h-2 rounded-full" style="width:${pct}%;background:${subjectColor(sub)}"></div></div>`;
