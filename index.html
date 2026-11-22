@@ -1077,7 +1077,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
 
         function createHistoryItemEl(entry) {
             const dateObj = new Date(entry.timestamp);
-            const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const dateStr = dateObj.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
             const item = document.createElement('div');
             const isSuper = entry.type === 'learn' && entry.quality === 'Super';
             item.className = "flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border text-xs";
@@ -1092,7 +1092,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                         </div>
                         <div>
                             <p class="font-bold text-slate-700">${isSuper ? '⭐ ' : ''}${entry.learnTime} Min ${entry.subject || ''}${entry.streak ? ` · 🔥${entry.streak}` : ''}</p>
-                            <p class="text-[10px] text-slate-400">${timeStr} Uhr</p>
+                            <p class="text-[10px] text-slate-400">${dateStr}</p>
                         </div>
                     </div>
                     <div class="text-right">
@@ -1110,7 +1110,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                         </div>
                         <div>
                             <p class="font-bold text-slate-700">${entry.usedMinutes} Min verwendet</p>
-                            <p class="text-[10px] text-slate-400">${timeStr} Uhr</p>
+                            <p class="text-[10px] text-slate-400">${dateStr}</p>
                         </div>
                     </div>
                     <div class="text-right">
