@@ -1200,7 +1200,38 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             showSection('main');
         }
 
-        async function saveManualBalance(){const newBal=parseFloat(document.getElementById('setting-manual-balance').value);if(!Number.isFinite(newBal)||newBal<0)return;try{const data=await apiPost({action:'setbalance',id:'balance-'+Date.now()+'-'+Math.random().toString(36).slice(2),balance:newBal});appState.balance=Number(data.status.kontostand)||0;await syncFromGoogle(false);updateUI();alert('Kontostand wurde angepasst.');}catch(err){alert('Kontostand konnte nicht gespeichert werden: '+err.message);}}
+        async function saveManualBalance() {
+            const input = document.getElementById('setting-manual-balance');
+            const newBalance = Number(input.value);
+            if (!Number.isFinite(newBalance) || newBalance < 0) {
+                alert('Bitte einen gültigen Kontostand ab 0 eingeben.');
+                return;
+            }
+
+            try {
+                const data = await apiPost({
+                    action: 'setbalance',
+                    id: `balance-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                    balance: newBalance
+                });
+                const confirmedBalance = Number(data.status && data.status.kontostand);
+                if (!Number.isFinite(confirmedBalance)) {
+                    throw new Error('Der Server hat keinen gültigen Kontostand zurückgegeben.');
+                }
+
+                appState.balance = confirmedBalance;
+                saveData();
+                updateUI();
+                input.value = confirmedBalance;
+
+                if (Math.abs(confirmedBalance - newBalance) > 0.001) {
+                    throw new Error(`Der Server meldet ${formatMinutes(confirmedBalance)} Min statt ${formatMinutes(newBalance)} Min.`);
+                }
+                alert('Kontostand wurde angepasst.');
+            } catch (err) {
+                alert('Kontostand konnte nicht bestätigt werden: ' + err.message);
+            }
+        }
 
         function confirmResetAll() {
             if (confirm("Möchtest du wirklich alle gespeicherten Daten und den Verlauf zurücksetzen?")) {
