@@ -77,7 +77,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                     <span class="text-indigo-500">◕</span>
                     <span>Verlauf</span>
                 </button>
-                <button onclick="toggleParentsPinModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-500 w-9 h-9 rounded-xl flex items-center justify-center transition active:scale-95" title="Elternbereich">
+                <button onclick="openParentSettings()" class="bg-slate-100 hover:bg-slate-200 text-slate-500 w-9 h-9 rounded-xl flex items-center justify-center transition active:scale-95" title="Einstellungen" aria-label="Einstellungen öffnen">
                     <span class="text-base">⚙</span>
                 </button>
             </div>
@@ -277,6 +277,11 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                     <h3 class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-3">Gelernt nach Fächern (Woche)</h3>
                     <div id="week-subjects-breakdown" class="space-y-2.5"></div>
                 </div>
+
+                <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+                    <h3 class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-3">Einträge dieser Woche</h3>
+                    <div id="history-list-week" class="space-y-2.5 max-h-[320px] overflow-y-auto pr-1"></div>
+                </div>
             </div>
 
             <!-- Content Monat -->
@@ -296,6 +301,11 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                 <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
                     <h3 class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-3">Fächerverteilung diesen Monat</h3>
                     <div id="month-subjects-breakdown" class="space-y-2.5"></div>
+                </div>
+
+                <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+                    <h3 class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-3">Einträge diesen Monat</h3>
+                    <div id="history-list-month" class="space-y-2.5 max-h-[320px] overflow-y-auto pr-1"></div>
                 </div>
             </div>
 
@@ -366,6 +376,10 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                             <span class="block text-slate-500 mb-1 text-[10px]">25 Min Lernzeit</span>
                             <input type="number" id="setting-bonus-25" min="0" class="w-full text-center bg-white border border-slate-200 rounded py-1 font-bold">
                         </div>
+                        <div class="bg-slate-50 p-2 rounded-xl border border-slate-200 text-center">
+                            <span class="block text-slate-500 mb-1 text-[10px]">30 Min Lernzeit</span>
+                            <input type="number" id="setting-bonus-30" min="0" class="w-full text-center bg-white border border-slate-200 rounded py-1 font-bold">
+                        </div>
                     </div>
                 </div>
 
@@ -395,21 +409,6 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
         </section>
 
     </main>
-
-    <!-- MODAL: PARENTS PIN MATHE-RÄTSEL -->
-    <div id="modal-pin" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl p-6 w-full max-w-xs text-center space-y-4 shadow-2xl">
-            <div class="text-amber-500 text-3xl"><span class="">🔒</span></div>
-            <h3 class="font-bold text-slate-800 text-base">Eltern-Zugang</h3>
-            <p class="text-xs text-slate-500">Löse die Matheaufgabe zum Fortfahren:</p>
-            <div id="pin-math-question" class="text-2xl font-extrabold text-indigo-600 bg-indigo-50 py-2 rounded-xl">--</div>
-            <input type="number" id="pin-input" placeholder="Ergebnis" class="w-full text-center text-xl font-bold bg-slate-50 border border-slate-200 rounded-xl py-2 focus:outline-none focus:border-indigo-500">
-            <div class="flex gap-2">
-                <button onclick="toggleParentsPinModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-xs transition">Abbrechen</button>
-                <button onclick="verifyPin()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs transition">Bestätigen</button>
-            </div>
-        </div>
-    </div>
 
     <!-- MODAL: MEDIENZEIT VERWENDEN -->
     <div id="modal-redeem" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -474,7 +473,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             consecutiveLosses: 0, // Zähler für aufeinanderfolgende Verluste
             missedBonusValues: [], // Bonuswerte der aufeinanderfolgenden Nieten
             selectedSubject: 'Mathe',
-            subjects: ['Latein', 'Englisch', 'Mathe', 'Musik', 'HSU', 'Deutsch'],
+            subjects: ['Latein', 'Englisch', 'Mathe', 'Musik', 'HSU', 'Deutsch', 'Geschichte'],
             settings: {
                 winRate: 50,
                 maxDailyBonus: 30,
@@ -989,15 +988,21 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             const sorted = Object.entries(subjectTotals).sort((a,b) => b[1]-a[1]);
             if (!sorted.length) {
                 breakdown.innerHTML = '<p class="text-center text-slate-400 text-xs py-4">In dieser Woche keine Lernzeit.</p>';
-                return;
+            } else {
+                sorted.forEach(([sub, mins]) => {
+                    const pct = weekTotal ? Math.round(mins/weekTotal*100) : 0;
+                    const row = document.createElement('div');
+                    row.className = 'mb-2';
+                    row.innerHTML = `<div class="flex justify-between text-[10px] mb-1"><span class="font-bold text-slate-700">${sub}</span><span class="text-slate-500">${mins} Min · ${pct}%</span></div><div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div class="h-2 rounded-full" style="width:${pct}%;background:${subjectColor(sub)}"></div></div>`;
+                    breakdown.appendChild(row);
+                });
             }
-            sorted.forEach(([sub, mins]) => {
-                const pct = weekTotal ? Math.round(mins/weekTotal*100) : 0;
-                const row = document.createElement('div');
-                row.className = 'mb-2';
-                row.innerHTML = `<div class="flex justify-between text-[10px] mb-1"><span class="font-bold text-slate-700">${sub}</span><span class="text-slate-500">${mins} Min · ${pct}%</span></div><div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden"><div class="h-2 rounded-full" style="width:${pct}%;background:${subjectColor(sub)}"></div></div>`;
-                breakdown.appendChild(row);
+            const weekEntries = appState.history.filter(entry => {
+                if (!entry.timestamp || !['learn', 'redeem'].includes(entry.type)) return false;
+                const d = new Date(entry.timestamp);
+                return !Number.isNaN(d.getTime()) && d >= monday && d < nextMonday;
             });
+            renderHistoryEntriesList('history-list-week', weekEntries, 'In dieser Woche noch keine Einträge.');
         }
 
         function renderMonthStats() {
@@ -1008,11 +1013,13 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             let monthLearned = 0;
             let monthBonus = 0;
             const subjectTotals = {};
+            const monthEntries = [];
 
             appState.history.forEach(entry => {
                 if (!entry.timestamp) return;
                 const d = new Date(entry.timestamp);
                 if (!Number.isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+                    if (['learn', 'redeem'].includes(entry.type)) monthEntries.push(entry);
                     if (entry.type === 'learn') {
                         monthLearned += entry.learnTime || 0;
                         monthBonus += entry.bonusWon || 0;
@@ -1029,6 +1036,17 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             const subContainer = document.getElementById('month-subjects-breakdown');
             subContainer.innerHTML = '';
             renderSubjectBreakdownList(subContainer, subjectTotals, monthLearned);
+            renderHistoryEntriesList('history-list-month', monthEntries, 'Diesen Monat noch keine Einträge.');
+        }
+
+        function renderHistoryEntriesList(containerId, entries, emptyMessage) {
+            const list = document.getElementById(containerId);
+            list.innerHTML = '';
+            if (entries.length === 0) {
+                list.innerHTML = `<p class="text-center text-slate-400 text-xs py-6">${emptyMessage}</p>`;
+                return;
+            }
+            entries.forEach(entry => list.appendChild(createHistoryItemEl(entry)));
         }
 
         function renderSubjectBreakdownList(container, totals, grandTotal) {
@@ -1091,7 +1109,7 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
                             <span class="">🎮</span>
                         </div>
                         <div>
-                            <p class="font-bold text-slate-700">${entry.usedMinutes} Min Medienzeit</p>
+                            <p class="font-bold text-slate-700">${entry.usedMinutes} Min verwendet</p>
                             <p class="text-[10px] text-slate-400">${timeStr} Uhr</p>
                         </div>
                     </div>
@@ -1146,33 +1164,9 @@ button{border:0;background:none}hr{border:0;border-top:1px solid #f1f5f9}.fixed{
             updateUI();
         }
 
-        let currentMathAnswer = 0;
-
-        function toggleParentsPinModal() {
-            const modal = document.getElementById('modal-pin');
-            if (modal.classList.contains('hidden')) {
-                const num1 = Math.floor(Math.random() * 6) + 3;
-                const num2 = Math.floor(Math.random() * 8) + 2;
-                currentMathAnswer = num1 * num2;
-
-                document.getElementById('pin-math-question').innerText = `${num1} × ${num2} = ?`;
-                document.getElementById('pin-input').value = '';
-                modal.classList.remove('hidden');
-            } else {
-                modal.classList.add('hidden');
-            }
-        }
-
-        function verifyPin() {
-            const inputVal = parseInt(document.getElementById('pin-input').value);
-            if (inputVal === currentMathAnswer) {
-                toggleParentsPinModal();
-                loadSettingsToUI();
-                showSection('parents');
-            } else {
-                alert("Falsche Antwort! Bitte versuche es erneut.");
-                toggleParentsPinModal();
-            }
+        function openParentSettings() {
+            loadSettingsToUI();
+            showSection('parents');
         }
 
         function loadSettingsToUI() {
